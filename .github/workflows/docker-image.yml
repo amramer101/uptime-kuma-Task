@@ -2,24 +2,36 @@ name: Docker Image CI
 
 on:
   push:
-    branches: [ "master" ]
-  pull_request:
-    branches: [ "master" ]
+    branches: [ "master" ] ## No branch called main
 
 jobs:
-  setup-ssh:
+  deploy:
     runs-on: ubuntu-latest
-    env:
-      EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_KEY}}
-      EC2_URL: ${{ secrets.EC2_URL }}
-      EC2_USERNAME: ${{ secrets.EC2_USERNAME }}
-
+    
     steps:
-    - name: Setup SSH for EC2
-      uses: omarhosny206/setup-ssh-for-ec2@v1.0.0
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Copy Compose File via SCP
+      uses: appleboy/scp-action@master
       with:
-          EC2_SSH_PRIVATE_KEY: $EC2_SSH_PRIVATE_KEY
-          EC2_URL: $EC2_URL
-    # then you can run commands/scripts directly on the EC2 instance e.g.:
-    - name: Create a new file on the EC2 instance with "hello-world"
-      run: ssh -o StrictHostKeyChecking=no $EC2_USERNAME@$EC2_URL "echo "hello-world" >> new_file.txt"
+        host: ${{ secrets.EC2_URL }}      
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        source: "docker-compose.yml"
+        target: "/home/ubuntu/"     
+
+    - name: Deploy via SSH
+      uses: appleboy/ssh-action@master
+      with:
+        host: ${{ secrets.EC2_URL }}
+        username: ${{ secrets.EC2_USERNAME }}
+        key: ${{ secrets.EC2_SSH_KEY }}
+        script: |
+          cd /home/ubuntu/
+          ls -la docker-compose.yml
+          
+          sudo docker-compose pull
+          sudo docker-compose up -d --remove-orphans
+          sudo docker image prune -f
+          echo "Deployment Done Successfully!"
